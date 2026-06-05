@@ -1,4 +1,4 @@
-About onnxruntime-feedstock
+About onnxruntime-feedstock (Jetson thor and orin)
 ===========================
 
 Feedstock license: [BSD-3-Clause](https://github.com/conda-forge/onnxruntime-feedstock/blob/main/LICENSE.txt)
