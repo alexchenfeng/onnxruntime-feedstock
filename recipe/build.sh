@@ -66,8 +66,7 @@ if [[ ! -z "${cuda_compiler_version+x}" && "${cuda_compiler_version}" != "None" 
             export CUDA_ARCH_LIST="110-real;87-real"
             ;;
 	*)
-            echo "No CUDA architecture list exists for CUDA v${cuda_compiler_version}. See build.sh for information on adding one."
-	    exit 1
+	    export CUDA_ARCH_LIST="110-real;87-real"
     esac
     case ${target_platform} in
 	linux-64)
@@ -90,6 +89,7 @@ if [[ ! -z "${cuda_compiler_version+x}" && "${cuda_compiler_version}" != "None" 
 fi
 
 python tools/ci_build/build.py \
+    --allow_running_as_root \
     --compile_no_warning_as_error \
     --enable_lto \
     --build_dir build-ci \

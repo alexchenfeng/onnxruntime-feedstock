@@ -1,0 +1,206 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+schema_version: 1
+
+context:
+  version: "1.26.0"
+  suffix: ""
+  cuda_compiler_version: 13.0.*
+  cuda_enabled: ${{ cuda_compiler_version != "None" }}
+  build_ext: ${{ ("cuda" ~ cuda_compiler_version) | replace(".", "") if cuda_enabled else "cpu" }}
+  build: ${{ 200 if cuda_enabled else 0 }}
+  cuda_major: 13
+
+recipe:
+  name: onnxruntime-split
+  version: ${{ version }}
+
+source:
+  url: https://github.com/microsoft/onnxruntime/archive/refs/tags/v${{ version }}.tar.gz
+  sha256: 2a90eb9a306c1eeb29213f5b165a55008ac5cb7d27e0935c4458c51a49ef091d
+  patches:
+    - if: win
+      then: patches/0001-avoid-conflicting-with-onnxruntime.dll-in-system32.patch
+    - patches/0002-use-first-nvcc-found.patch
+    - patches/0003-Add-_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH-for-cud.patch
+    - patches/0004-Remove-redundant-include-paths-from-custom-op-test-t.patch
+    - patches/0005-Lower-python_require-to-3.10.patch
+
+build:
+  number: ${{ build }}
+  skip:
+    - ${{ cuda_compiler_version != "None" and suffix == "-novec" }}
+    - ppc64le
+    - ${{ osx and x86_64 }}
+
+outputs:
+  - package:
+      name: onnxruntime${{ suffix }}
+      version: ${{ version }}
+    build:
+      script:
+        - if: unix
+          then: ./build.sh
+        - if: win
+          then: build.bat
+      python:
+        entry_points:
+          - onnxruntime_test = onnxruntime.tools.onnxruntime_test:main
+    requirements:
+      build:
+        - if: build_platform != target_platform
+          then:
+            - python
+            - cross-python_${{ target_platform }}
+            - numpy
+            - pybind11
+        - ${{ compiler('c') }}
+        - ${{ stdlib('c') }}
+        - ${{ compiler('cxx') }}
+        - if: cuda_compiler_version != "None"
+          then: ${{ compiler('cuda') }}
+        - if: cuda_major >= 12 and build_platform != target_platform
+          then:
+            - cuda-cudart-dev
+            - cuda-nvrtc-dev
+        - cmake <4
+        - ninja
+        - libprotobuf >=3.21
+      host:
+        - python
+        - pip
+        - setuptools
+        - wheel
+        - if: cuda_compiler_version != "None"
+          then:
+            - cudnn
+            - cuda-version ${{ cuda_compiler_version }}
+        - if: cuda_major >= 12
+          then:
+            - libcublas-dev
+            - libcusparse-dev
+            - libcurand-dev
+            - libcufft-dev
+            - cuda-cudart-dev
+            - cuda-nvrtc-dev
+        - flake8
+        - gmock
+        - libdate
+        - packaging
+        - python-flatbuffers
+        - optional-lite
+        - if: osx and arm64
+          then: nlohmann_json
+        - zlib
+        - numpy
+        - pybind11
+      run:
+        - packaging
+        - protobuf
+        - python
+        - python-flatbuffers
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+      run_constraints:
+        - if: suffix == "-novec"
+          then: onnxruntime <0a0
+      ignore_run_exports:
+        from_package:
+          - zlib
+    tests:
+      - python:
+          imports:
+            - onnxruntime
+          pip_check: true
+      - script:
+          - onnxruntime_test --help
+          - if: osx and arm64
+            then: python -c "import onnxruntime as ort; assert 'CoreMLExecutionProvider' in ort.get_available_providers(), ort.get_available_providers()"
+        requirements:
+          run:
+            - pip
+            - if: python == "3.12"
+              then: numpy 1.26.*
+
+  - package:
+      name: onnxruntime${{ suffix }}-cpp
+      version: ${{ version }}
+    build:
+      string: h${{ hash }}_${{ build_number }}_${{ build_ext }}
+      script:
+        - if: unix
+          then: ./install-cpp.sh
+        - if: win
+          then: install-cpp.bat
+    requirements:
+      build:
+        - ${{ stdlib('c') }}
+        - ${{ compiler('c') }}
+        - ${{ compiler('cxx') }}
+        - if: cuda_compiler_version != "None"
+          then: ${{ compiler('cuda') }}
+      run:
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+      run_constraints:
+        - if: suffix == "-novec"
+          then: onnxruntime-cpp <0a0
+      run_exports:
+        - ${{ pin_subpackage('onnxruntime' ~ suffix ~ '-cpp', upper_bound='x.x.x') }}
+    tests:
+      - requirements:
+          run:
+            - ${{ compiler('cxx') }}
+            - ${{ stdlib('c') }}
+            - cmake-package-check
+        files:
+          recipe:
+            - test.cpp
+            - run_cpp_test.bat
+        script:
+          - if: unix
+            then:
+              - test -f $PREFIX/include/onnxruntime/core/session/onnxruntime_cxx_api.h
+              - test -f $PREFIX/lib/libonnxruntime${SHLIB_EXT}
+          - if: osx and arm64
+            then:
+              - test -f $PREFIX/include/onnxruntime/core/providers/coreml/coreml_provider_factory.h
+          - if: unix and cuda_compiler_version != "None"
+            then:
+              - test -f $PREFIX/lib/libonnxruntime_providers_shared${SHLIB_EXT}
+              - test -f $PREFIX/lib/libonnxruntime_providers_cuda${SHLIB_EXT}
+          - if: win
+            then:
+              - if not exist %LIBRARY_INC%\\onnxruntime\\core\\session\\onnxruntime_cxx_api.h exit 1
+              - if not exist %LIBRARY_LIB%\\onnxruntime_conda.lib exit 1
+              - if not exist %LIBRARY_BIN%\\onnxruntime_conda.dll exit 1
+          - if: win and cuda_compiler_version != "None"
+            then:
+              - if not exist %LIBRARY_LIB%\\onnxruntime_providers_shared.lib exit 1
+              - if not exist %LIBRARY_BIN%\\onnxruntime_providers_shared.dll exit 1
+              - if not exist %LIBRARY_LIB%\\onnxruntime_providers_cuda.lib exit 1
+              - if not exist %LIBRARY_BIN%\\onnxruntime_providers_cuda.dll exit 1
+          - if: linux
+            then: $CXX $CXXFLAGS -I$PREFIX/include/ -L$PREFIX/lib/ -lonnxruntime test.cpp
+          - if: osx
+            then: $CXX $CXXFLAGS -I$PREFIX/include/ -L$PREFIX/lib/ -lonnxruntime -Wl,-rpath,$CONDA_PREFIX/lib test.cpp
+          - if: unix
+            then: ./a.out
+          - if: win
+            then: call .\run_cpp_test.bat
+          - cmake-package-check onnxruntime --targets onnxruntime::onnxruntime
+
+about:
+  homepage: https://github.com/microsoft/onnxruntime/
+  summary: cross-platform, high performance ML inferencing and training accelerator
+  license: "MIT AND BSL-1.0 AND BSD-3-Clause" 
+  license_file:
+    - LICENSE
+
+extra:
+  recipe-maintainers:
+    - xhochy
+    - janjagusch
+    - jtilly
+    - cbourjau
+    - hmaarrfk
+    - traversaro
