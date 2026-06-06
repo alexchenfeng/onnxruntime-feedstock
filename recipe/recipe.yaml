@@ -7,7 +7,7 @@ context:
   cuda_compiler_version: 13.0.*
   cuda_enabled: ${{ cuda_compiler_version != "None" }}
   build_ext: ${{ ("cuda" ~ cuda_compiler_version) | replace(".", "") if cuda_enabled else "cpu" }}
-  build: ${{ 200 if cuda_enabled else 0 }}
+  build: ${{ 201 if cuda_enabled else 0 }}
   cuda_major: 13
 
 recipe:
@@ -64,7 +64,7 @@ outputs:
             - cuda-nvrtc-dev
         - cmake <4
         - ninja
-        - libprotobuf >=3.21
+        - libprotobuf ==6.33.5
       host:
         - python
         - pip
