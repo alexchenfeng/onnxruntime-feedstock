@@ -7,7 +7,7 @@ context:
   cuda_compiler_version: 13.0.*
   cuda_enabled: ${{ cuda_compiler_version != "None" }}
   build_ext: ${{ ("cuda" ~ cuda_compiler_version) | replace(".", "") if cuda_enabled else "cpu" }}
-  build: ${{ 201 if cuda_enabled else 0 }}
+  build: ${{ 204 if cuda_enabled else 0 }}
   cuda_major: 13
 
 recipe:
@@ -64,7 +64,7 @@ outputs:
             - cuda-nvrtc-dev
         - cmake <4
         - ninja
-        - libprotobuf ==6.33.5
+        - libprotobuf ==7.35.1
       host:
         - python
         - pip
@@ -72,7 +72,7 @@ outputs:
         - wheel
         - if: cuda_compiler_version != "None"
           then:
-            - cudnn
+            - cudnn ==9.26.0.51
             - cuda-version ${{ cuda_compiler_version }}
         - if: cuda_major >= 12
           then:
@@ -98,6 +98,7 @@ outputs:
         - protobuf
         - python
         - python-flatbuffers
+        - cudnn ==9.26.0.51
         - if: cuda_compiler_version != "None"
           then: __cuda
       run_constraints:
